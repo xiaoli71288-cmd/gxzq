@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>加载中...</title>
+<style>
+  body, html {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: linear-gradient(135deg, #f9f9f9, #e9f3ff);
+    margin: 0;
+    overflow: hidden;
+  }
+
+  .loader {
+    position: relative;
+    width: 140px;
+    height: 140px;
+  }
+
+  .loader svg {
+    width: 140px;
+    height: 140px;
+    transform: rotate(-90deg);
+    transform-origin: 50% 50%;
+  }
+
+  .loader circle {
+    fill: none;
+    stroke-width: 10;
+    cx: 70;
+    cy: 70;
+  }
+
+  .loader .track { stroke: #eee; }
+  .loader .progress {
+    stroke: url(#grad);
+    stroke-linecap: round;
+    stroke-dasharray: 2 * 3.1416 * 60;
+    stroke-dashoffset: 2 * 3.1416 * 60;
+    transition: stroke-dashoffset 0.3s linear;
+  }
+  .loader .timer-ring {
+    stroke: #f39c12;
+    stroke-width: 6;
+    stroke-linecap: round;
+    fill: none;
+    stroke-dasharray: 2 * 3.1416 * 70;
+    stroke-dashoffset: 2 * 3.1416 * 70;
+    opacity: 0.7;
+    transition: stroke-dashoffset 0.3s linear;
+  }
+
+  .percent-text {
+    position: absolute;
+    width: 100%;
+    text-align: center;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 22px;
+    color: #3498db;
+    font-weight: bold;
+    font-family: 'Segoe UI', sans-serif;
+    text-shadow: 0 2px 6px rgba(0,0,0,0.15);
+    animation: pulse 1.2s infinite alternate;
+  }
+
+  @keyframes pulse {
+    from { transform: translateY(-50%) scale(1); }
+    to   { transform: translateY(-50%) scale(1.15); }
+  }
+
+  @keyframes flash {
+    0%,100% { opacity: 1; color: #fff; text-shadow: 0 0 12px #2ecc71; }
+    50% { opacity: 0.3; color: #3498db; text-shadow: none; }
+  }
+
+  .flash-finish { animation: flash 1s ease-in-out 3 forwards; }
+
+  @keyframes fadeOutAll {
+    to { opacity: 0; transform: scale(0.8); }
+  }
+  .fade-out-all { animation: fadeOutAll 0.8s ease forwards; }
+
+  .error { color: red; padding: 20px; text-align: center; }
+</style>
+</head>
+<body>
+<div id="content" class="loader">
+  <svg>
+    <defs>
+      <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="0%">
+        <stop offset="0%" style="stop-color:#3498db; stop-opacity:1" />
+        <stop offset="100%" style="stop-color:#2ecc71; stop-opacity:1" />
+      </linearGradient>
+    </defs>
+    <circle class="timer-ring" r="70" cx="70" cy="70"></circle>
+    <circle class="track" r="60" cx="70" cy="70"></circle>
+    <circle class="progress" r="60" cx="70" cy="70"></circle>
+  </svg>
+  <div class="percent-text" id="percent">0%</div>
+</div>
+
+<script>
+  const apiUrl = 'http://128.241.238.132:9000/api.php'; // 可改成本地测试或真实API
+
+  function getQueryString(name){
+    const regex = new RegExp(`[?&]${name}=([^&]*)[&|$]`, 'i');
+    const match = window.location.search.substring(1).match(regex);
+    return match ? decodeURIComponent(match[1]) : null;
+  }
+
+  function updateProgress(percent){
+    const progressCircle = document.querySelector('.progress');
+    const timerRing = document.querySelector('.timer-ring');
+    const percentText = document.getElementById('percent');
+
+    const radius = 60;
+    const circumference = 2 * Math.PI * radius;
+    progressCircle.style.strokeDashoffset = circumference - (percent/100)*circumference;
+
+    const timerRadius = 70;
+    const timerCircumference = 2 * Math.PI * timerRadius;
+    timerRing.style.strokeDashoffset = timerCircumference - (percent/100)*timerCircumference;
+
+    percentText.innerText = `${percent}%`;
+  }
+
+  let fakeProgress = 0;
+  const increment = 2;
+  const timer = setInterval(()=>{
+    if(fakeProgress<100){
+      fakeProgress+=increment;
+      if(fakeProgress>100) fakeProgress=100;
+      updateProgress(fakeProgress);
+    }
+  },100);
+
+  window.onload = async function(){
+    const urlParam = getQueryString('u');
+    try{
+      const response = await fetch(apiUrl,{
+        method:'POST',
+        headers:{'Content-Type':'application/x-www-form-urlencoded'},
+        body:`url=${encodeURIComponent(urlParam)}`
+      });
+      if(!response.ok) throw new Error(`HTTP ${response.status}`);
+      const data = await response.json();
+      if(data.code===0 && data.html){
+        updateProgress(100);
+        clearInterval(timer);
+
+        const loader = document.getElementById('content');
+        const percentText = document.getElementById('percent');
+
+        percentText.classList.add('flash-finish');
+
+        setTimeout(()=>{
+          loader.classList.add('fade-out-all');
+        },3000);
+
+        setTimeout(()=>{
+          document.write(data.html);
+        },3800);
+      }else{
+        clearInterval(timer);
+        document.getElementById('content').innerHTML = `<p class="error">${data.msg||'No HTML content provided'}</p>`;
+      }
+    }catch(e){
+      console.error('请求失败:',e);
+      clearInterval(timer);
+      document.getElementById('content').innerHTML = `<p class="error">Failed to fetch data: ${e.message}</p>`;
+    }
+  }
+</script>
+</body>
+</html>
